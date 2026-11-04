@@ -1,0 +1,56 @@
+services:
+  db:
+    image: mariadb:11.4
+    container_name: nova-salud-db
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Configura DB_ROOT_PASSWORD en .env}
+      MARIADB_DATABASE: nova_salud
+      MARIADB_USER: ${DB_USER:-nova}
+      MARIADB_PASSWORD: ${DB_PASSWORD:?Configura DB_PASSWORD en .env}
+      TZ: America/Lima
+    volumes:
+      - nova_db_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: nova-salud-backend
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      CORS_ORIGIN: http://localhost:8080
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_USER: ${DB_USER:-nova}
+      DB_PASSWORD: ${DB_PASSWORD:?Configura DB_PASSWORD en .env}
+      DB_NAME: nova_salud
+      DB_TIMEZONE: "-05:00"
+      JWT_SECRET: ${JWT_SECRET:?Configura JWT_SECRET en .env}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-8h}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-10}
+      DIAS_ALERTA_VENCIMIENTO: ${DIAS_ALERTA_VENCIMIENTO:-60}
+      DESCUENTO_MAX_VENDEDOR_PCT: ${DESCUENTO_MAX_VENDEDOR_PCT:-10}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: nova-salud-frontend
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-8080}:80"
+    depends_on:
+      - backend
+
+volumes:
+  nova_db_data:
